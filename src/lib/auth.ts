@@ -1,13 +1,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, type Role } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 export async function requireUser() {
   const supabase = await createClient();
-
   // getUser(), NOT getSession(). getSession() reads the cookie and
   // trusts it — that's attacker-controllable input. getUser() verifies
   // the token against Supabase. Nearly every real Supabase auth
@@ -25,4 +24,12 @@ export async function requireUser() {
 
   if (!profile) redirect("/login");
   return profile;
+}
+
+export async function requireRole(...allowed: Role[]) {
+  const user = await requireUser();
+  if (!allowed.includes(user.role as Role)) {
+    redirect("/");
+  }
+  return user;
 }

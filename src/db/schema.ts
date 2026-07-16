@@ -15,6 +15,7 @@ import {
 import { sql } from "drizzle-orm";
 
 export const userRole = pgEnum("user_role", ["client", "artist", "owner"]);
+export type Role = (typeof userRole.enumValues)[number];
 
 export const tstzrange = customType<{ data: string }>({
   dataType() {
