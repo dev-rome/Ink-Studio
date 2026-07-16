@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
 const STUDIO_TZ = "America/New_York";
+const BUFFER_MINUTES = 30;
 
 export type Gap = { start: Date; end: Date };
 
@@ -30,7 +31,12 @@ export async function getAvailability(
         AND wh.day_of_week = EXTRACT(DOW FROM ${date}::date)
     ),
     blocked AS (
-      SELECT during FROM sessions
+      SELECT
+        tstzrange(
+          lower(during) - (${BUFFER_MINUTES} || ' minutes')::interval,
+          upper(during) + (${BUFFER_MINUTES} || ' minutes')::interval
+        ) AS during
+      FROM sessions
         WHERE artist_id = ${artistId}
           AND during && (SELECT shift FROM the_day)
       UNION ALL
