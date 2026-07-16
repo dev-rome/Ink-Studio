@@ -1,5 +1,4 @@
 import "server-only";
-
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
@@ -40,14 +39,14 @@ export async function getAvailability(
           AND during && (SELECT shift FROM the_day)
     )
     SELECT
-        tstzmultirange((SELECT shift FROM the_day))
-        - COALESCE(
-            (SELECT range_agg(during) FROM blocked),
-            '{}'::tstzmultirange
-          ) AS gaps;
+      tstzmultirange((SELECT shift FROM the_day))
+      - COALESCE(
+          (SELECT range_agg(during) FROM blocked),
+          '{}'::tstzmultirange
+        ) AS gaps;
   `);
 
-  const raw = result[0]?.gaps as string | null;
+  const raw = (result[0] as { gaps: string | null } | undefined)?.gaps ?? null;
   if (!raw) return [];
 
   return parseMultirange(raw).filter(
