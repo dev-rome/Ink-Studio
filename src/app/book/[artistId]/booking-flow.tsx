@@ -58,6 +58,7 @@ export function BookingFlow({
 
     const hold = await createHold({
       artistId,
+      serviceId: service.id,
       start: selected.start,
       end: selected.end,
       type: service.durationMinutes <= 30 ? "consultation" : "sitting",

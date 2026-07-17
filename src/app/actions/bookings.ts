@@ -2,17 +2,18 @@
 
 import { requireUser } from "@/lib/auth";
 import { db } from "@/db";
-import { bookings, sessions } from "@/db/schema";
+import { bookings, sessions, services } from "@/db/schema";
 import { sql, eq } from "drizzle-orm";
 import { z } from "zod";
 import { isRecord } from "@/lib/guards";
 import { stripe } from "@/lib/stripe";
-import { gapsToSlots } from "@/lib/slots";
 import { getAvailability } from "@/db/queries/availability";
+import { gapsToSlots } from "@/lib/slots";
 
 const CreateHoldInput = z
   .object({
     artistId: z.uuid(),
+    serviceId: z.uuid(),
     start: z.iso.datetime(),
     end: z.iso.datetime(),
     type: z.enum(["consultation", "sitting"]),
@@ -25,19 +26,28 @@ const CreateHoldInput = z
 
 type Result =
   | { ok: true; bookingId: string }
-  | { ok: false; error: "slot_taken" | "invalid" | "unauthorized" };
+  | { ok: false; error: "slot_taken" | "invalid" };
 
 export async function createHold(raw: unknown): Promise<Result> {
-  let user;
-  try {
-    user = await requireUser();
-  } catch {
-    return { ok: false, error: "unauthorized" };
-  }
+  const user = await requireUser();
 
   const parsed = CreateHoldInput.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const { artistId, start, end, type, description } = parsed.data;
+  const { artistId, serviceId, start, end, type, description } = parsed.data;
+
+  const [service] = await db
+    .select({
+      artistId: services.artistId,
+      depositCents: services.depositCents,
+      active: services.active,
+    })
+    .from(services)
+    .where(eq(services.id, serviceId))
+    .limit(1);
+
+  if (!service || service.artistId !== artistId || !service.active) {
+    return { ok: false, error: "invalid" };
+  }
 
   const during = `[${start},${end})`;
 
@@ -48,6 +58,8 @@ export async function createHold(raw: unknown): Promise<Result> {
         .values({
           clientId: user.id,
           artistId,
+          serviceId,
+          depositCentsSnapshot: service.depositCents,
           status: "pending_payment",
           description,
         })
@@ -72,19 +84,30 @@ export async function createHold(raw: unknown): Promise<Result> {
   }
 }
 
-export async function createCheckout(
-  bookingId: string,
-): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  let user;
-  try {
-    user = await requireUser();
-  } catch {
-    return { ok: false, error: "unauthorized" };
-  }
+export async function createCheckout(bookingId: string): Promise<
+  | { ok: true; url: string }
+  | {
+      ok: false;
+      error:
+        | "not_found"
+        | "forbidden"
+        | "not_pending"
+        | "no_deposit"
+        | "stripe_error";
+    }
+> {
+  const user = await requireUser();
 
   const [booking] = await db
-    .select()
+    .select({
+      clientId: bookings.clientId,
+      status: bookings.status,
+      artistId: bookings.artistId,
+      depositCentsSnapshot: bookings.depositCentsSnapshot,
+      serviceName: services.name,
+    })
     .from(bookings)
+    .leftJoin(services, eq(bookings.serviceId, services.id))
     .where(eq(bookings.id, bookingId))
     .limit(1);
 
@@ -94,14 +117,21 @@ export async function createCheckout(
     return { ok: false, error: "not_pending" };
   }
 
+  const amount = booking.depositCentsSnapshot;
+  if (!amount) return { ok: false, error: "no_deposit" };
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: [
       {
         price_data: {
           currency: "usd",
-          product_data: { name: "Tattoo session deposit" },
-          unit_amount: 5000,
+          product_data: {
+            name: booking.serviceName
+              ? `${booking.serviceName} — deposit`
+              : "Session deposit",
+          },
+          unit_amount: amount,
         },
         quantity: 1,
       },
