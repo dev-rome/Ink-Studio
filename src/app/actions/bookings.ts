@@ -5,10 +5,9 @@ import { db } from "@/db";
 import { bookings, sessions } from "@/db/schema";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { revalidatePath } from "next/cache";
 import { isRecord } from "@/lib/guards";
 
-const CreateBookingInput = z
+const CreateHoldInput = z
   .object({
     artistId: z.uuid(),
     start: z.iso.datetime(),
@@ -16,7 +15,7 @@ const CreateBookingInput = z
     type: z.enum(["consultation", "sitting"]),
     description: z.string().max(500).optional(),
   })
-  .refine((data) => new Date(data.end) > new Date(data.start), {
+  .refine((d) => new Date(d.end) > new Date(d.start), {
     message: "end must be after start",
     path: ["end"],
   });
@@ -25,7 +24,7 @@ type Result =
   | { ok: true; bookingId: string }
   | { ok: false; error: "slot_taken" | "invalid" | "unauthorized" };
 
-export async function createBooking(raw: unknown): Promise<Result> {
+export async function createHold(raw: unknown): Promise<Result> {
   let user;
   try {
     user = await requireUser();
@@ -33,7 +32,7 @@ export async function createBooking(raw: unknown): Promise<Result> {
     return { ok: false, error: "unauthorized" };
   }
 
-  const parsed = CreateBookingInput.safeParse(raw);
+  const parsed = CreateHoldInput.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "invalid" };
   const { artistId, start, end, type, description } = parsed.data;
 
@@ -46,7 +45,7 @@ export async function createBooking(raw: unknown): Promise<Result> {
         .values({
           clientId: user.id,
           artistId,
-          status: "enquiry",
+          status: "pending_payment",
           description,
         })
         .returning({ id: bookings.id });
@@ -61,16 +60,11 @@ export async function createBooking(raw: unknown): Promise<Result> {
       return booking.id;
     });
 
-    revalidatePath("/bookings");
     return { ok: true, bookingId };
   } catch (err) {
-    if (isExclusionViolation(err)) {
+    if (isRecord(err) && err.code === "23P01") {
       return { ok: false, error: "slot_taken" };
     }
     throw err;
   }
-}
-
-function isExclusionViolation(err: unknown): boolean {
-  return isRecord(err) && err.code === "23P01";
 }

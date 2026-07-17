@@ -24,6 +24,7 @@ export const tstzrange = customType<{ data: string }>({
 });
 
 export const bookingStatus = pgEnum("booking_status", [
+  "pending_payment",
   "enquiry",
   "deposit_paid",
   "confirmed",

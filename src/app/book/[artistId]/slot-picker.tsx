@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createBooking } from "@/app/actions/bookings";
+import { createHold } from "@/app/actions/bookings";
 
 type SlotData = { start: string; end: string };
 
@@ -23,7 +23,7 @@ export function SlotPicker({
     if (!selected) return;
     setStatus("booking");
 
-    const result = await createBooking({
+    const result = await createHold({
       artistId,
       start: selected.start,
       end: selected.end,
