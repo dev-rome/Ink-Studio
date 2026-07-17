@@ -7,6 +7,8 @@ import { sql, eq } from "drizzle-orm";
 import { z } from "zod";
 import { isRecord } from "@/lib/guards";
 import { stripe } from "@/lib/stripe";
+import { gapsToSlots } from "@/lib/slots";
+import { getAvailability } from "@/db/queries/availability";
 
 const CreateHoldInput = z
   .object({
@@ -112,4 +114,17 @@ export async function createCheckout(
 
   if (!session.url) return { ok: false, error: "stripe_error" };
   return { ok: true, url: session.url };
+}
+
+export async function getSlotsForService(
+  artistId: string,
+  date: string,
+  durationMinutes: number,
+): Promise<{ start: string; end: string }[]> {
+  const gaps = await getAvailability(artistId, date, durationMinutes);
+  const slots = gapsToSlots(gaps, durationMinutes);
+  return slots.map((s) => ({
+    start: s.start.toISOString(),
+    end: s.end.toISOString(),
+  }));
 }

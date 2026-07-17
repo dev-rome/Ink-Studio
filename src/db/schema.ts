@@ -11,6 +11,8 @@ import {
   unique,
   check,
   customType,
+  integer,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -67,8 +69,10 @@ export const bookings = pgTable("bookings", {
     .notNull()
     .references(() => artists.id),
   status: bookingStatus("status").notNull().default("enquiry"),
+  serviceId: uuid("service_id").references(() => services.id),
   description: text("description"),
   depositAmount: numeric("deposit_amount", { precision: 10, scale: 2 }),
+  depositCentsSnapshot: integer("deposit_cents_snapshot"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -124,6 +128,20 @@ export const enquiries = pgTable("enquiries", {
   rawText: text("raw_text").notNull(),
   parsedIntent: jsonb("parsed_intent"),
   bookingId: uuid("booking_id").references(() => bookings.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const services = pgTable("services", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  artistId: uuid("artist_id")
+    .notNull()
+    .references(() => artists.id),
+  name: text("name").notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  depositCents: integer("deposit_cents").notNull(),
+  active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
