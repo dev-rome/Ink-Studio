@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createHold } from "@/app/actions/bookings";
+import { createCheckout, createHold } from "@/app/actions/bookings";
 
 type SlotData = { start: string; end: string };
 
@@ -23,34 +23,26 @@ export function SlotPicker({
     if (!selected) return;
     setStatus("booking");
 
-    const result = await createHold({
+    const hold = await createHold({
       artistId,
       start: selected.start,
       end: selected.end,
       type,
     });
 
-    if (result.ok) setStatus("booked");
-    else if (result.error === "slot_taken") setStatus("taken");
-    else setStatus("error");
-  }
+    if (!hold.ok) {
+      setStatus(hold.error === "slot_taken" ? "taken" : "error");
+      return;
+    }
 
-  if (status === "booked" && selected) {
-    const label = new Date(selected.start).toLocaleString([], {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-    return (
-      <div className="space-y-1">
-        <p className="text-green-700">Booked — see you then.</p>
-        <p className="text-sm text-neutral-500">{label}</p>
-      </div>
-    );
-  }
+    const checkout = await createCheckout(hold.bookingId);
+    if (!checkout.ok) {
+      setStatus("error");
+      return;
+    }
 
+    window.location.href = checkout.url;
+  }
   return (
     <div className="space-y-4">
       {slots.length === 0 && (
