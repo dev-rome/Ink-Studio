@@ -1,9 +1,7 @@
 import "server-only";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
-
-const STUDIO_TZ = "America/New_York";
-const BUFFER_MINUTES = 30;
+import { STUDIO_TZ, BUFFER_MINUTES } from "@/lib/config";
 
 export type Gap = { start: Date; end: Date };
 
